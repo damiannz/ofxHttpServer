@@ -12,7 +12,8 @@
 
 using namespace std;
 
-ofxHTTPServer ofxHTTPServer::instance;
+ofxHTTPServer* ofxHTTPServer::instance = NULL;
+
 
 // Helper functions and structures only used internally by the server
 //------------------------------------------------------
@@ -88,7 +89,7 @@ int ofxHTTPServer::iterate_post (void *coninfo_cls, enum MHD_ValueKind kind, con
 	  }else{
 			if(con_info->file_fields.find(filename)==con_info->file_fields.end()){
 				con_info->file_fields[filename] = NULL;
-				con_info->file_fields[filename] = fopen ((instance.uploadDir +"/"+ filename).c_str(), "ab");
+				con_info->file_fields[filename] = fopen ((getServer()->uploadDir +"/"+ filename).c_str(), "ab");
 				if(con_info->file_fields[filename] == NULL){
 					con_info->file_fields.erase(filename);
 					return MHD_NO;
@@ -128,7 +129,7 @@ void ofxHTTPServer::request_completed (void *cls, struct MHD_Connection *connect
   delete con_info;
   *con_cls = NULL;
 
-  instance.numClients--;
+  getServer()->numClients--;
 }
 
 int ofxHTTPServer::send_page (struct MHD_Connection *connection, long length, const char* page, int status_code)
@@ -194,7 +195,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 	// and return MHD_YES, that will make the server call us again
 	if(NULL == *con_cls){
 		con_info = new connection_info;
-		instance.numClients++;
+		getServer()->numClients++;
 
 		// super ugly hack to manage poco multipart post connections as it sets boundary between "" and
 		// libmicrohttpd doesn't seem to support that
@@ -211,7 +212,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 
 
 
-		if (instance.numClients >= instance.maxClients){
+		if (getServer()->numClients >= getServer()->maxClients){
 			ofFile file503("503.html");
 			ofBuffer buf;
 			file503 >> buf;
@@ -249,7 +250,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 
 
 	// if the extension of the url is that set to the callback, call the events to generate the response
-	if(instance.callbackExtensionSet && strurl.substr(strurl.size()-instance.callbackExtension.size())==instance.callbackExtension){
+	if(getServer()->callbackExtensionSet && strurl.substr(strurl.size()-getServer()->callbackExtension.size())==getServer()->callbackExtension){
 		ofLogVerbose("ofxHttpServer") << method << " serving from callback: " << url << endl;
 
 		ofxHTTPServerResponse response;
@@ -258,7 +259,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 
 		if(strmethod=="GET"){
 			response.requestFields = con_info->fields;
-			ofNotifyEvent(instance.getEvent,response);
+			ofNotifyEvent(getServer()->getEvent,response);
 			if(response.errCode>=300 && response.errCode<400){
 				ret = send_redirect(connection, response.location.c_str(), response.errCode);
 			}else{
@@ -284,7 +285,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 						  response.uploadedFiles[con_info->file_to_key_index[it->first]]=it->first;
 					  }
 				}
-				ofNotifyEvent(instance.postEvent,response);
+				ofNotifyEvent(getServer()->postEvent,response);
 				if(response.errCode>=300 && response.errCode<400){
 					ret = send_redirect(connection, response.location.c_str(), response.errCode);
 				}else{
@@ -298,13 +299,13 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 	}else{
 		ofLogVerbose("ofxHttpServer") << method << " serving from filesystem: " << url << endl;
 
-		ofFile file(instance.fsRoot + url,ofFile::ReadOnly,true);
+		ofFile file(getServer()->fsRoot + url,ofFile::ReadOnly,true);
 		if(!file.exists()){
 			ofxHTTPServerResponse response;
 			response.errCode = 404;
 			response.url = strurl;
 
-			ofNotifyEvent(instance.fileNotFoundEvent,response);
+			ofNotifyEvent(getServer()->fileNotFoundEvent,response);
 			if(response.errCode>=300 && response.errCode<400){
 				ret = send_redirect(connection, response.location.c_str(), response.errCode);
 			}else if(response.errCode!=404){
@@ -321,7 +322,7 @@ int ofxHTTPServer::answer_to_connection(void *cls,
 		}else{
 			ofBuffer buf;
 			file >> buf;
-			ofLogVerbose("ofxHttpServer") << "response: file " << instance.fsRoot << url << " of size " << buf.size() << endl;
+			ofLogVerbose("ofxHttpServer") << "response: file " << getServer()->fsRoot << url << " of size " << buf.size() << endl;
 			ret = send_page(connection, buf.size(), buf.getBinaryBuffer(), MHD_HTTP_OK);
 		}
 	}

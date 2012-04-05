@@ -41,7 +41,9 @@ public:
 class ofxHTTPServer {
 public:
 	static ofxHTTPServer * getServer() {
-		return &instance;
+		if ( instance == NULL )
+			instance = new ofxHTTPServer();
+		return instance;
 	}
 
 	virtual ~ofxHTTPServer();
@@ -65,7 +67,7 @@ public:
 				size_t *upload_data_size, void **con_cls);
 
 private:
-	static ofxHTTPServer instance;
+	static ofxHTTPServer* instance;
 
 	ofxHTTPServer();
 	struct MHD_Daemon *http_daemon;
